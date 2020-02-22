@@ -2,8 +2,13 @@ library(shiny)
 library(auth0)
 library(pool)
 library(DBI)
+library(png)
+library(dplyr)
+library(rgeos)
+library(sp)
+library(ggplot2)
 
-#
+# Set up pool
 pool <- dbPool(
   drv = RMariaDB::MariaDB(),
   dbname = "appdata",
@@ -13,31 +18,31 @@ pool <- dbPool(
   port = 3306
 )
 
-DBI::dbGetQuery(pool, "select ST_AsText(blueprint) from gyms where gym_id=1")
-
-# simple UI with user info
+# Simple UI with user info
 ui <- navbarPage(
   title = "Full Send",
   
   tabPanel("Routes",
-           imageOutput("gym_blueprint", height = 350,
-                       click = "image_click"
-                       )
-           # shinyWidgets::switchInput(
-           #   inputId = "",
-           #   onLabel = "Sent!",
-           #   offLabel = "Did Not Send",
-           #   onStatus = 'success',
-           #   offStatus = 'warning'
-           # )
-           # uiOutput()
+           uiOutput("gym_selectize"),
+           plotOutput("gym_blueprint", height = 350,
+                       click = "plot_click"
+                       ),
+           # verbatimTextOutput("click_info"),
+           uiOutput("route_switch_inputs"),
+           DTOutput("current_routes_dt")
   ),
   
+  # tabPanel("Client Info",
+  #          verbatimTextOutput("client_info")
+  #          ),
+  
   tabPanel("User Info",
-           verbatimTextOutput("user_info")),
+           verbatimTextOutput("user_info")
+           ),
   
   tabPanel("Credential Info",
-           verbatimTextOutput("credential_info")),
+           verbatimTextOutput("credential_info")
+           ),
   
   logoutButton()
   
@@ -45,59 +50,61 @@ ui <- navbarPage(
 
 server <- function(input, output, session) {
   
+  output$gym_selectize <- renderUI({
+    selectizeInput('selected_gym', label = 'Choose your gym', choices = c('Central Rock Gym - North Station' = 1))
+  })
+  
   # Generate an image with black lines every 10 pixels
-  output$gym_blueprint <- renderImage({
-    # Get width and height of image output
-    width  <- session$clientData$output_gym_blueprint_width
-    height <- session$clientData$output_gym_blueprint_height
-    npixels <- width * height
+  output$gym_blueprint <- renderPlot({
+    req(input$selected_gym)
+    gym_id <- input$selected_gym
+    gym_polygon_df <-
+      dbGetQuery(pool, paste0('select ST_AsWKT(blueprint) as wkt from gyms where gym_id=', gym_id)) %>%
+      `[`(1) %>% readWKT() %>% 
+      `@`(polygons) %>% `[[`(1) %>% `@`(Polygons) %>% `[[`(1) %>% `@`(coords) %>% as_tibble()
     
-    # Fill the pixels for R, G, B
-    m <- matrix(1, nrow = height, ncol = width)
-    # Add gray vertical and horizontal lines every 10 pixels
-    m[seq_len(ceiling(height/10)) * 10 - 9, ] <- 0.75
-    m[, seq_len(ceiling(width/10)) * 10 - 9]  <- 0.75
-    
-    # Convert the vector to an array with 3 planes
-    img <- array(c(m, m, m), dim = c(height, width, 3))
-    
-    # Write it to a temporary file
-    outfile <- tempfile(fileext = ".png")
-    writePNG(img, target = outfile)
-    
-    # Return a list containing information about the image
-    list(
-      src = outfile,
-      contentType = "image/png",
-      width = width,
-      height = height,
-      alt = "This is alternate text"
-    )
+    ggplot(gym_polygon_df, aes(x=x, y=y)) + 
+      geom_polygon(fill="transparent", color="blue")
   })
   
   output$click_info <- renderPrint({
-    cat("input$image_click:\n")
-    str(input$image_click)
+    cat("input$plot_click:\n")
+    str(input$plot_click)
   })
   
-  current_routes <- reactive(input$image_click, {
-    dplyr::tbl(pool, routes) %>% 
-      mutate(d = sqrt((input$image_click$x - route_x)^2 + (input$image_click$y - route_y)^2)) %>% 
-      arrange(d)
+  current_routes <- reactive({
+    req(input$selected_gym)
+    req(input$plot_click)
+    selected_gym_id <- input$selected_gym
+    
+    dplyr::tbl(pool, 'routes') %>% 
+      filter(gym_id == selected_gym_id) %>%
+      collect() %>% 
+      mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
+      top_n(-3, d) %>% 
+      arrange(route_x) %>% 
+      select(route_id, color, grade_v)
   })
   
-  # output$route_switch_inputs <- renderUI({
-  #   route_list <- lapply(current_routes(), function(i) {
-  #     name <- paste("route", i, sep="")
-  #     shinyWidgets::switchInput(
-  #       inputId = ,
-  #       onLabel = "Sent!",
-  #       offLabel = "Did Not Send",
-  #       onStatus = 'success',
-  #       offStatus = 'warning'
-  #     )
-  #   })
-  #   do.call(tagList, unlist(routeList, recursive = FALSE))
+  output$current_routes_dt <- renderDT(current_routes())
+  
+  output$route_switch_inputs <- renderUI({
+    req(input$plot_click)
+    routes <- current_routes()
+    f <- function(route_id,color,grade_v){shinyWidgets::switchInput(
+      inputId = paste0("route_",route_id),
+      label = div(style = paste0("color:", color), paste0("V",grade_v)),
+      onLabel = "Sent!",
+      offLabel = "Did Not Send",
+      onStatus = 'success',
+      offStatus = 'warning'
+    )}
+    purrr::pmap(routes, f)
+    })
+  
+  # print client info
+  # output$client_info <- renderPrint({
+  #   session$clientData
   # })
   
   # print user info
