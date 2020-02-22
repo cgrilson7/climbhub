@@ -23,7 +23,6 @@ RUN R -e "renv::restore()"
 # Transfer app and associated files:
 # copy app and .Renviron (contains secrets) into the container
 COPY .Renviron /srv/shiny-server/
-COPY _auth0.yml /srv/shiny-server/
 COPY app.R /srv/shiny-server/
 # copy 'in' folder
 # COPY in /srv/shiny-server/in
