@@ -2,6 +2,7 @@ library(shiny)
 library(auth0)
 library(pool)
 library(DBI)
+library(shinyWidgets)
 
 #
 pool <- dbPool(
@@ -22,14 +23,14 @@ ui <- navbarPage(
   tabPanel("Routes",
            imageOutput("gym_blueprint", height = 350,
                        click = "image_click"
-                       )
-           # shinyWidgets::switchInput(
-           #   inputId = "",
-           #   onLabel = "Sent!",
-           #   offLabel = "Did Not Send",
-           #   onStatus = 'success',
-           #   offStatus = 'warning'
-           # )
+                       ),
+           shinyWidgets::switchInput(
+             inputId = "",
+             onLabel = "Sent!",
+             offLabel = "Did Not Send",
+             onStatus = 'success',
+             offStatus = 'warning'
+           )
            # uiOutput()
   ),
   
