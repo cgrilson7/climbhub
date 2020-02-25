@@ -21,9 +21,15 @@ pool <- dbPool(
 # Simple UI with user info
 ui <- navbarPage(
 
+  
   title = "ClimbHub",
   
   tabPanel("Routes",
+           
+           tags$head(
+             tags$link(rel = "stylesheet", type = "text/css", href = "style.css")
+           ),
+           
            uiOutput("gym_selectize"),
            plotOutput("gym_blueprint", height = 350,
                        click = "plot_click"
@@ -52,7 +58,7 @@ ui <- navbarPage(
 server <- function(input, output, session) {
   
   output$gym_selectize <- renderUI({
-    gyms <- dbGetQuery('select gym_id, gym_name from gyms')
+    gyms <- dbGetQuery(pool, 'select gym_name, gym_id from gyms')
     selectizeInput(
       'selected_gym',
       label = 'Choose your gym',
@@ -106,7 +112,7 @@ server <- function(input, output, session) {
     routes <- current_routes()
     f <- function(route_id,color,grade_v){shinyWidgets::switchInput(
       inputId = paste0("route_",route_id),
-      label = div(style = paste0("color:", color), paste0("V",grade_v)),
+      label = div(style = paste("text-align:center", "font-size:large", "font-weight:bold", paste0("color:", color, ";"), sep="; "), paste0("V",grade_v)),
       onLabel = "Sent!",
       offLabel = "Did Not Send",
       onStatus = 'success',

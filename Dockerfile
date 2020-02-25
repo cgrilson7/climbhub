@@ -33,7 +33,7 @@ COPY app.R /srv/shiny-server/
 # copy 'in' folder
 # COPY in /srv/shiny-server/in
 # copy 'www' folder
-# COPY www /srv/shiny-server/www
+COPY www /srv/shiny-server/www
 
 # expose port 3838
 EXPOSE 3838
