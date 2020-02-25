@@ -29,23 +29,23 @@ ui <- navbarPage(
            plotOutput("gym_blueprint", height = 350,
                        click = "plot_click"
                        ),
-           verbatimTextOutput("click_info"),
+           # verbatimTextOutput("click_info"),
            uiOutput("route_switch_inputs"),
-           DTOutput("current_routes_dt")
+           # DTOutput("current_routes_dt")
            
   ),
   
-  tabPanel("Client Info",
-           verbatimTextOutput("client_info")
-           ),
+  # tabPanel("Client Info",
+  #          verbatimTextOutput("client_info")
+  #          ),
   
-  tabPanel("User Info",
-           verbatimTextOutput("user_info")
-           ),
-  
-  tabPanel("Credential Info",
-           verbatimTextOutput("credential_info")
-           ),
+  # tabPanel("User Info",
+  #          verbatimTextOutput("user_info")
+  #          ),
+  # 
+  # tabPanel("Credential Info",
+  #          verbatimTextOutput("credential_info")
+  #          ),
   
   tabPanel("Log Out",
            logoutButton()
