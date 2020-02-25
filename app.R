@@ -70,10 +70,12 @@ server <- function(input, output, session) {
   output$gym_blueprint <- renderPlot({
     
     req(input$selected_gym)
-    gym_id <- input$selected_gym
+    
+    sql <- sqlInterpolate(pool, 'SELECT ST_AsWKT(blueprint) as WKT FROM gyms WHERE GYM_ID = ?gym_id',
+                          gym_id = input$selected_gym)
     
     gym_polygon_df <-
-      dbGetQuery(pool, paste0('select ST_AsWKT(blueprint) as wkt from gyms where gym_id=', gym_id)) %>%
+      dbGetQuery(pool, sql) %>%
       `[`(1) %>% readWKT() %>% 
       `@`(polygons) %>% `[[`(1) %>% `@`(Polygons) %>% `[[`(1) %>% `@`(coords) %>% as_tibble()
     
@@ -93,16 +95,16 @@ server <- function(input, output, session) {
   current_routes <- reactive({
     req(input$selected_gym)
     req(input$plot_click)
-    selected_gym_id <- input$selected_gym
     
-    dplyr::tbl(pool, 'routes') %>% 
-      filter(gym_id == selected_gym_id,
-             is.null(date_replaced)) %>%
-      collect() %>% 
+    sql <- sqlInterpolate(pool, 'SELECT * FROM routes WHERE gym_id = ?gym_id AND date_replaced IS NULL',
+                          gym_id = input$selected_gym)
+    
+    dbGetQuery(pool, sql) %>%
       mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
       top_n(-5, d) %>% 
       arrange(route_x) %>% 
       select(route_id, color, grade_v)
+    
   })
   
   output$current_routes_dt <- renderDT(current_routes())
