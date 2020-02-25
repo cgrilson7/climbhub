@@ -19,40 +19,65 @@ pool <- dbPool(
 )
 
 # Simple UI with user info
-ui <- navbarPage(
+ui <- fluidPage(theme = "style.css",
+
+  titlePanel("ClimbHub", windowTitle="Track your sends"),
   
-  title = "ClimbHub",
-  
-  tabPanel("Routes",
-           
-           uiOutput("gym_selectize"),
-           plotOutput("gym_blueprint", height = 350,
-                       click = "plot_click"
-                       ),
-           # verbatimTextOutput("click_info"),
-           uiOutput("route_switch_inputs"),
-           # DTOutput("current_routes_dt")
-           
-  ),
-  
-  # tabPanel("Client Info",
-  #          verbatimTextOutput("client_info")
-  #          ),
-  
-  # tabPanel("User Info",
-  #          verbatimTextOutput("user_info")
-  #          ),
-  # 
-  # tabPanel("Credential Info",
-  #          verbatimTextOutput("credential_info")
-  #          ),
-  
-  tabPanel("Log Out",
-           logoutButton()
-           )
-  
-  
-  
+  tabsetPanel(
+    
+    tabPanel("Routes",
+             
+             uiOutput("gym_selectize"),
+             div(align = "center",
+                 plotOutput("gym_blueprint",
+                            height = 350,
+                            click = "plot_click"
+                            )
+             ),
+             br(),
+             # verbatimTextOutput("click_info"),
+             
+             div(align = "center", uiOutput("route_switch_inputs")),
+             
+             br(),
+             br(),
+             # DTOutput("current_routes_dt")
+             absolutePanel(bottom = 5, left = 0, right = 0, fixed = TRUE,
+                           div(align = "center",
+                               div(style="display:inline-block",
+                                 actionButton('goto_gym_blueprint',
+                                              label = "Return to Map",
+                                              icon = icon("map", class = "far"),
+                                              width = '400px')
+                                ),
+                               div(style="display:inline-block",
+                                   actionButton('submit_route_switch_inputs',
+                                                label = "Submit Climbs",
+                                                icon = icon("cloud-upload-alt"),
+                                                width = '400px')
+                               )
+                           )
+             )
+    ),
+    
+    tabPanel("Log Out",
+             br(),
+             logoutButton(),
+             br()
+    )
+    
+    # tabPanel("Client Info",
+    #          verbatimTextOutput("client_info")
+    #          ),
+    
+    # tabPanel("User Info",
+    #          verbatimTextOutput("user_info")
+    #          ),
+    # 
+    # tabPanel("Credential Info",
+    #          verbatimTextOutput("credential_info")
+    #          ),
+  )
 )
 
 server <- function(input, output, session) {
@@ -80,10 +105,11 @@ server <- function(input, output, session) {
       `@`(polygons) %>% `[[`(1) %>% `@`(Polygons) %>% `[[`(1) %>% `@`(coords) %>% as_tibble()
     
     ggplot(gym_polygon_df, aes(x=x, y=y)) + 
-      geom_polygon(fill="navy") +
+      geom_polygon(fill="#28c9c4") +
       ylim(min(gym_polygon_df$y) - 10, 100) +
       theme_void() + 
-      theme(plot.margin=unit(c(0,0,0,0), "mm"))
+      theme(plot.margin=unit(c(0,0,0,0), "mm"),
+            panel.background=element_rect(fill="#333333")) 
     
   })
   
@@ -92,16 +118,15 @@ server <- function(input, output, session) {
     str(input$plot_click)
   })
   
-  current_routes <- reactive({
+  gym_routes <- reactive({
     req(input$selected_gym)
-    req(input$plot_click)
-    
+
     sql <- sqlInterpolate(pool, 'SELECT * FROM routes WHERE gym_id = ?gym_id AND date_replaced IS NULL',
                           gym_id = input$selected_gym)
     
     dbGetQuery(pool, sql) %>%
-      mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
-      top_n(-5, d) %>% 
+      # mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
+      # top_n(-5, d) %>% 
       arrange(route_x) %>% 
       select(route_id, color, grade_v)
     
@@ -110,18 +135,31 @@ server <- function(input, output, session) {
   output$current_routes_dt <- renderDT(current_routes())
   
   output$route_switch_inputs <- renderUI({
-    req(input$plot_click)
-    routes <- current_routes()
-    f <- function(route_id,color,grade_v){shinyWidgets::switchInput(
-      inputId = paste0("route_",route_id),
-      label = div(style = paste("text-align:center", "font-size:large", "font-weight:bold", paste0("color:", color, ";"), sep="; "), paste0("V",grade_v)),
-      onLabel = "Sent!",
-      offLabel = "Did Not Send",
-      onStatus = 'success',
-      offStatus = 'warning'
-    )}
+    req(input$selected_gym)
+    
+    routes <- gym_routes()
+    
+    f <- function(route_id,color,grade_v){
+      shinyWidgets::switchInput(
+        inputId = paste0("route_",route_id),
+        label = div(
+          style = paste(
+            "text-align:center",
+            "font-size:large",
+            "font-weight:bold",
+            paste0("color:", color, ";"), sep="; "
+          ),
+            paste0("V",grade_v)
+        ),
+        onLabel = "Sent!",
+        offLabel = "Did Not Send",
+        onStatus = 'success',
+        offStatus = 'warning'
+      )
+    }
+    
     purrr::pmap(routes, f)
-    })
+  })
   
   # print client info
   output$client_info <- renderPrint({
@@ -139,5 +177,5 @@ server <- function(input, output, session) {
   
 }
 
-shinyAppAuth0(ui, server)
-# shiny::shinyApp(ui, server)
+# shinyAppAuth0(ui, server)
+shiny::shinyApp(ui, server)
