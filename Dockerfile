@@ -9,7 +9,12 @@ RUN apt-get update && apt-get install -y \
     libcairo2-dev \
     libxt-dev \
     libssl-dev \
-    libssh2-1-dev
+    libssh2-1-dev \
+    gdal-bin \
+    libgeos-dev \ 
+    libproj-dev \
+    libgdal-dev \
+    libudunits2-dev
     
 # install renv for R package management
 ENV RENV_VERSION 0.9.3
@@ -23,6 +28,7 @@ RUN R -e "renv::restore()"
 # Transfer app and associated files:
 # copy app and .Renviron (contains secrets) into the container
 COPY .Renviron /srv/shiny-server/
+COPY _auth0.yml /srv/shiny-server/
 COPY app.R /srv/shiny-server/
 # copy 'in' folder
 # COPY in /srv/shiny-server/in
@@ -32,15 +38,11 @@ COPY app.R /srv/shiny-server/
 # expose port 3838
 EXPOSE 3838
 
-# chown
-# Changes the owner or group associated with a file
-    # -R
-    # Descends directories recursively, changing the ownership for each
-    # file. When a symbolic link is encountered and the link points to a
-    # directory, the ownership of that directory is changed but the directory
-    # is not further transversed.
-    # Ex. chown -R [owner]:[group] [directory] 
-RUN sudo chown -R shiny:shiny /srv/shiny-server
+# give the 'shiny' user ownership of all files under /srv/shiny-server
+# RUN sudo chown -R shiny:shiny /srv/shiny-server
+
+# Edit the default rocker/shiny shiny-server.conf file, copying in the one in the repo:
+COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
 
 # boot up the shiny-server
 CMD ["/usr/bin/shiny-server.sh"]

@@ -4,3 +4,6 @@
 .Ruserdata
 fullsend.pem
 .Renviron
+initialization.sql
+insert_routes.sql
+connect
