@@ -21,7 +21,7 @@ pool <- dbPool(
 # Simple UI with user info
 ui <- navbarPage(
 
-  title = "Full Send",
+  title = "ClimbHub",
   
   tabPanel("Routes",
            uiOutput("gym_selectize"),
@@ -33,9 +33,9 @@ ui <- navbarPage(
            DTOutput("current_routes_dt")
   ),
   
-  # tabPanel("Client Info",
-  #          verbatimTextOutput("client_info")
-  #          ),
+  tabPanel("Client Info",
+           verbatimTextOutput("client_info")
+           ),
   
   tabPanel("User Info",
            verbatimTextOutput("user_info")
@@ -52,7 +52,12 @@ ui <- navbarPage(
 server <- function(input, output, session) {
   
   output$gym_selectize <- renderUI({
-    selectizeInput('selected_gym', label = 'Choose your gym', choices = c('Central Rock Gym - North Station' = 1))
+    gyms <- dbGetQuery('select gym_id, gym_name from gyms')
+    selectizeInput(
+      'selected_gym',
+      label = 'Choose your gym',
+      choices = tibble::deframe(gyms)
+    )
   })
   
   # Generate gym blueprint
@@ -69,9 +74,6 @@ server <- function(input, output, session) {
     ggplot(gym_polygon_df, aes(x=x, y=y)) + 
       geom_polygon(fill="navy") +
       ylim(min(gym_polygon_df$y) - 10, 100) +
-      # theme_minimal() +
-      # theme(axis.title = element_blank(),
-      #       panel.grid = element_blank())
       theme_void() + 
       theme(plot.margin=unit(c(0,0,0,0), "mm"))
     
@@ -114,9 +116,9 @@ server <- function(input, output, session) {
     })
   
   # print client info
-  # output$client_info <- renderPrint({
-  #   session$clientData
-  # })
+  output$client_info <- renderPrint({
+    session$clientData
+  })
   
   # print user info
   output$user_info <- renderPrint({
@@ -129,6 +131,5 @@ server <- function(input, output, session) {
   
 }
 
-# note that here we're using a different version of shinyApp!
 shinyAppAuth0(ui, server)
 # shiny::shinyApp(ui, server)

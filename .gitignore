@@ -7,3 +7,4 @@ fullsend.pem
 initialization.sql
 insert_routes.sql
 connect
+.DS_Store
