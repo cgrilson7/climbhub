@@ -20,15 +20,10 @@ pool <- dbPool(
 
 # Simple UI with user info
 ui <- navbarPage(
-
   
   title = "ClimbHub",
   
   tabPanel("Routes",
-           
-           tags$head(
-             tags$link(rel = "stylesheet", type = "text/css", href = "style.css")
-           ),
            
            uiOutput("gym_selectize"),
            plotOutput("gym_blueprint", height = 350,
@@ -37,6 +32,7 @@ ui <- navbarPage(
            verbatimTextOutput("click_info"),
            uiOutput("route_switch_inputs"),
            DTOutput("current_routes_dt")
+           
   ),
   
   tabPanel("Client Info",
@@ -51,14 +47,18 @@ ui <- navbarPage(
            verbatimTextOutput("credential_info")
            ),
   
-  logoutButton()
+  tabPanel("Log Out",
+           logoutButton()
+           )
+  
+  
   
 )
 
 server <- function(input, output, session) {
   
   output$gym_selectize <- renderUI({
-    gyms <- dbGetQuery(pool, 'select gym_name, gym_id from gyms')
+    gyms <- dbGetQuery(pool, 'select gym_name, gym_id from gyms where blueprint is not null')
     selectizeInput(
       'selected_gym',
       label = 'Choose your gym',
