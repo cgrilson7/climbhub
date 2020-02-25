@@ -7,6 +7,7 @@ library(rgeos)
 library(sp)
 library(ggplot2)
 library(DT)
+library(shinyjs)
 
 # Set up pool
 pool <- dbPool(
@@ -20,7 +21,10 @@ pool <- dbPool(
 
 # Simple UI with user info
 ui <- fluidPage(theme = "style.css",
+  
+  useShinyjs(),
 
+                
   titlePanel("ClimbHub", windowTitle="Track your sends"),
   
   tabsetPanel(
@@ -41,20 +45,20 @@ ui <- fluidPage(theme = "style.css",
              
              br(),
              br(),
-             # DTOutput("current_routes_dt")
+             # DTOutput("gym_routes_datatable")
              absolutePanel(bottom = 5, left = 0, right = 0, fixed = TRUE,
                            div(align = "center",
                                div(style="display:inline-block",
                                  actionButton('goto_gym_blueprint',
                                               label = "Return to Map",
                                               icon = icon("map", class = "far"),
-                                              width = '400px')
+                                              width = '300px')
                                 ),
                                div(style="display:inline-block",
                                    actionButton('submit_route_switch_inputs',
                                                 label = "Submit Climbs",
                                                 icon = icon("cloud-upload-alt"),
-                                                width = '400px')
+                                                width = '300px')
                                )
                            )
              )
@@ -62,7 +66,7 @@ ui <- fluidPage(theme = "style.css",
     
     tabPanel("Log Out",
              br(),
-             logoutButton(),
+             logoutButton(label = 'Log Out', width = '400px', height = '200px'),
              br()
     )
     
@@ -127,17 +131,33 @@ server <- function(input, output, session) {
     dbGetQuery(pool, sql) %>%
       # mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
       # top_n(-5, d) %>% 
-      arrange(route_x) %>% 
-      select(route_id, color, grade_v)
+      arrange(route_x)
     
   })
   
-  output$current_routes_dt <- renderDT(current_routes())
+  observeEvent(input$plot_click, {
+    # get closest route to click
+    route_switch_id <- gym_routes() %>% 
+      mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
+      top_n(-1, d) %>% 
+      pull(route_id) %>% 
+      paste0("route_", .)
+      
+    js_text <- paste0("document.getElementById('", route_switch_id, "').scrollIntoView({behavior: 'smooth'})")
+
+    print(js_text)
+    
+    shinyjs::runjs(js_text)
+    
+  })
+  
+  
+  output$gym_routes_datatable <- renderDT(gym_routes())
   
   output$route_switch_inputs <- renderUI({
     req(input$selected_gym)
     
-    routes <- gym_routes()
+    routes <- gym_routes() %>% select(route_id, color, grade_v)
     
     f <- function(route_id,color,grade_v){
       shinyWidgets::switchInput(
@@ -159,6 +179,7 @@ server <- function(input, output, session) {
     }
     
     purrr::pmap(routes, f)
+    
   })
   
   # print client info
@@ -174,6 +195,8 @@ server <- function(input, output, session) {
   output$credential_info <- renderPrint({
     session$userData$auth0_credentials
   })
+  
+  onStop(function() pool::poolClose(pool))
   
 }
 
