@@ -17,10 +17,6 @@ body {
   border-color:#333;
 }
 
-.bootstrap-switch-label {
-  background-color: #999 !important;
-}
-
 .nav-tabs>li>a {
   color:#28c9c4;
   font-weight:500;
@@ -29,4 +25,11 @@ body {
 .nav-tabs>li.active>a, .nav-tabs>li.active>a:focus, .nav-tabs>li.active>a:hover {
   color:#28c9c4;
   font-weight:700;
+}
+
+.same-row{
+  max-width: 200px;
+  display: table-cell;
+  padding-right: 30px;
+  background-color: #28c9c4;
 }

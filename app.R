@@ -8,6 +8,7 @@ library(sp)
 library(ggplot2)
 library(DT)
 library(shinyjs)
+library(tidyr)
 
 # Set up pool
 pool <- dbPool(
@@ -30,7 +31,6 @@ ui <- fluidPage(theme = "style.css",
   tabsetPanel(
     
     tabPanel("Routes",
-             
              uiOutput("gym_selectize"),
              div(align = "center",
                  plotOutput("gym_blueprint",
@@ -41,19 +41,22 @@ ui <- fluidPage(theme = "style.css",
              br(),
              # verbatimTextOutput("click_info"),
              
-             div(align = "center", uiOutput("route_switch_inputs")),
-             
+             div(style = 'overflow-x:scroll;',
+                 uiOutput(outputId="route_switch_inputs")
+                 ),
+
              br(),
+             # verbatimTextOutput("routes_for_submission"),
              br(),
              # DTOutput("gym_routes_datatable")
              absolutePanel(bottom = 5, left = 0, right = 0, fixed = TRUE,
                            div(align = "center",
-                               div(style="display:inline-block",
-                                 actionButton('goto_gym_blueprint',
-                                              label = "Return to Map",
-                                              icon = icon("map", class = "far"),
-                                              width = '300px')
-                                ),
+                               # div(style="display:inline-block",
+                               #   actionButton('goto_gym_blueprint',
+                               #                label = "Return to Map",
+                               #                icon = icon("map", class = "far"),
+                               #                width = '300px')
+                               #  ),
                                div(style="display:inline-block",
                                    actionButton('submit_route_switch_inputs',
                                                 label = "Submit Climbs",
@@ -63,6 +66,10 @@ ui <- fluidPage(theme = "style.css",
                            )
              )
     ),
+    
+    # tabPanel("User Info",
+    #          verbatimTextOutput("user_info")
+    #          ),
     
     tabPanel("Log Out",
              br(),
@@ -74,9 +81,7 @@ ui <- fluidPage(theme = "style.css",
     #          verbatimTextOutput("client_info")
     #          ),
     
-    # tabPanel("User Info",
-    #          verbatimTextOutput("user_info")
-    #          ),
+
     # 
     # tabPanel("Credential Info",
     #          verbatimTextOutput("credential_info")
@@ -90,7 +95,7 @@ server <- function(input, output, session) {
     gyms <- dbGetQuery(pool, 'select gym_name, gym_id from gyms where blueprint is not null')
     selectizeInput(
       'selected_gym',
-      label = 'Choose your gym',
+      label = '',
       choices = tibble::deframe(gyms)
     )
   })
@@ -129,9 +134,43 @@ server <- function(input, output, session) {
                           gym_id = input$selected_gym)
     
     dbGetQuery(pool, sql) %>%
-      # mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
-      # top_n(-5, d) %>% 
       arrange(route_x)
+    
+  })
+  
+  output$gym_routes_datatable <- renderDT(gym_routes())
+  
+  output$route_switch_inputs <- renderUI({
+    req(input$selected_gym)
+    
+    routes <- gym_routes() %>% select(route_id, color, grade_v)
+    
+    f <- function(route_id,color,grade_v){
+      div(class="same-row", align = "center",
+        shinyWidgets::checkboxGroupButtons(
+          inputId = paste0("route_",route_id),
+          label = div(align = "center",
+            style = paste(
+              "text-align:center",
+              "font-size:30px",
+              "font-weight:bold",
+              paste0("color:", color, ";"), sep="; "
+            ),
+            paste0("V",grade_v)
+          ),
+          choices = c("Sent"),
+          direction = 'vertical',
+          status = 'primary',
+          checkIcon = list(
+            yes = icon("ok", 
+                       lib = "glyphicon"),
+            no = icon("remove",
+                      lib = "glyphicon"))
+        )
+      )
+    }
+    
+    purrr::pmap(routes, f)
     
   })
   
@@ -143,7 +182,7 @@ server <- function(input, output, session) {
       pull(route_id) %>% 
       paste0("route_", .)
       
-    js_text <- paste0("document.getElementById('", route_switch_id, "').scrollIntoView({behavior: 'smooth'})")
+    js_text <- paste0("document.getElementById('", route_switch_id, "').scrollIntoView({behavior: 'smooth', inline: 'center'})")
 
     print(js_text)
     
@@ -151,34 +190,48 @@ server <- function(input, output, session) {
     
   })
   
+  observeEvent(input$goto_gym_blueprint, {
+    
+    shinyjs::runjs("document.getElementById('gym_blueprint').scrollIntoView({behavior: 'smooth'})")
+    
+  })
   
-  output$gym_routes_datatable <- renderDT(gym_routes())
-  
-  output$route_switch_inputs <- renderUI({
+  observeEvent(input$submit_route_switch_inputs, {
+    
     req(input$selected_gym)
     
-    routes <- gym_routes() %>% select(route_id, color, grade_v)
+    route_switch_ids <- gym_routes() %>% 
+      pull(route_id) %>% 
+      paste0("route_", .)
     
-    f <- function(route_id,color,grade_v){
-      shinyWidgets::switchInput(
-        inputId = paste0("route_",route_id),
-        label = div(
-          style = paste(
-            "text-align:center",
-            "font-size:large",
-            "font-weight:bold",
-            paste0("color:", color, ";"), sep="; "
-          ),
-            paste0("V",grade_v)
-        ),
-        onLabel = "Sent!",
-        offLabel = "Did Not Send",
-        onStatus = 'success',
-        offStatus = 'warning'
-      )
+    sends <- route_switch_ids %>%
+      map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE)) %>% 
+      filter(value == "Sent") %>% 
+      mutate(route_id = as.integer(substr(route, 7, nchar(route))),
+             climber_auth0 = session$userData$auth0_info$sub) %>% 
+      select(route_id, climber_auth0)
+    
+    write <- function(route_id, climber_auth0){
+      sql <- paste0("INSERT INTO sends (route_id, climber_auth0) VALUES (", route_id, ", '", climber_auth0, "')")
+      dbExecute(pool, sql)
     }
     
-    purrr::pmap(routes, f)
+    purrr::pmap(sends, write)
+    
+    lapply(route_switch_ids, function(x){updateCheckboxGroupButtons(session, x, selected = character(0))})
+     
+  })
+  
+  # output$routes_for_submission <- renderPrint({
+    
+    req(input$selected_gym)
+    
+    route_switch_ids <- gym_routes() %>% 
+      pull(route_id) %>% 
+      paste0("route_", .)
+    
+    route_switch_ids %>%
+      map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE))
     
   })
   
@@ -200,5 +253,5 @@ server <- function(input, output, session) {
   
 }
 
-# shinyAppAuth0(ui, server)
-shiny::shinyApp(ui, server)
+shinyAppAuth0(ui, server)
+# shiny::shinyApp(ui, server)
