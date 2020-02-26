@@ -1,4 +1,6 @@
-# fullsend
-Tracking your sends and engaging in some friendly competition - at your local gym.
+# ClimbHub
+Tracking your climbs and engaging in some friendly competition - at your local gym.
 
-# options(shiny.port=3838) set in .Rprofile
+An R Shiny app, with connections to an AWS RDS MySQL instance, running in a Docker container on an AWS EC2 instance. User authentication with Auth0. 
+
+All accessible at http://ec2-18-212-114-249.compute-1.amazonaws.com:3838/ ™
