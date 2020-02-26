@@ -329,13 +329,11 @@ server <- function(input, output, session) {
     session$userData$auth0_credentials
   })
 
-
-# On exit -----------------------------------------------------------------
-
-  onStop(function() pool::poolClose(pool))
-  
 }
-
+  
+# onStop: close pool -----------------------------------------------------------------
+onStop(function() pool::poolClose(pool))
+  
 
 # Start app ---------------------------------------------------------------
 
