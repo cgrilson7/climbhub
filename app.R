@@ -10,6 +10,7 @@ library(DT)
 library(shinyjs)
 library(tidyr)
 library(shinyWidgets)
+library(purrr)
 
 # Set up pool
 pool <- dbPool(
@@ -223,7 +224,7 @@ server <- function(input, output, session) {
      
   })
   
-  # output$routes_for_submission <- renderPrint({
+  output$routes_for_submission <- renderPrint({
     
     req(input$selected_gym)
     
