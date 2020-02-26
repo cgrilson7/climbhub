@@ -52,7 +52,9 @@ ui <- fluidPage(theme = "style.css",
     tabPanel("Routes",
              
              # User selects their gym
-             uiOutput("gym_selectize"),
+             div(align = "center",
+                 uiOutput("gym_selectize")
+            ),
              
              # Plot of gym blueprint rendered
              div(align = "center",
