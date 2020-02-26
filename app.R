@@ -332,7 +332,7 @@ server <- function(input, output, session) {
 
 # On exit -----------------------------------------------------------------
 
-  # onStop(function() pool::poolClose(pool))
+  onStop(function() pool::poolClose(pool))
   
 }
 
