@@ -9,6 +9,7 @@ library(ggplot2)
 library(DT)
 library(shinyjs)
 library(tidyr)
+library(shinyWidgets)
 
 # Set up pool
 pool <- dbPool(
