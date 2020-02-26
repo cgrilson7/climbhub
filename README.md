@@ -1,5 +1,5 @@
 # ClimbHub
-![alt text](https://publicdomainvectors.org/photos/escalade.png "public domain image")
+![](https://publicdomainvectors.org/photos/escalade.png =250x)
 
 Tracking your climbs and engaging in some friendly competition - at your local gym.
 
