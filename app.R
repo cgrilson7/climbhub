@@ -22,62 +22,74 @@ pool <- dbPool(
   port = 3306
 )
 
-# Simple UI with user info
+
+# UI section --------------------------------------------------------------
+
 ui <- fluidPage(theme = "style.css",
   
+  # allows app to run custom js     
   useShinyjs(),
+  
+  # allows app to run sweetAlerts
+  useSweetAlert(),
 
-                
+  # Title and tab/window header
   titlePanel("ClimbHub", windowTitle="Track your sends"),
   
+  # Tab-based layout
   tabsetPanel(
     
+    # Main tab flow:
+    # - User selects their gym
+    # - Plot of gym blueprint rendered
+    # - User taps/clicks the plot near the routes they have climbed
+    # - Horizontal bar of routes scrolls to the routes nearest to the user's click
+    # - User checks off routes
+    # - User repeats the above 3 steps until they have checked the routes they wish to submit
+    # - User submits routes, which are written to the MySQL database and given a timestamp (time of the send) 
+    # - Route checkboxes are reset
+    
     tabPanel("Routes",
+             
+             # User selects their gym
              uiOutput("gym_selectize"),
+             
+             # Plot of gym blueprint rendered
              div(align = "center",
                  plotOutput("gym_blueprint",
                             height = 350,
-                            click = "plot_click"
-                            )
+                            click = "plot_click")
              ),
-             br(),
-             # verbatimTextOutput("click_info"),
              
-             div(style = 'overflow-x:scroll;',
-                 uiOutput(outputId="route_switch_inputs")
-                 ),
+             br(),
+             
+             # Horizontal bar of routes scrolls to the routes nearest to the user's click
+             div(style = 'overflow-x:scroll; -webkit-overflow-scrolling: touch;',
+                 uiOutput(outputId="route_check_inputs")
+             ),
 
-             br(),
-             # verbatimTextOutput("routes_for_submission"),
-             br(),
-             # DTOutput("gym_routes_datatable")
-             absolutePanel(bottom = 5, left = 0, right = 0, fixed = TRUE,
-                           div(align = "center",
-                               # div(style="display:inline-block",
-                               #   actionButton('goto_gym_blueprint',
-                               #                label = "Return to Map",
-                               #                icon = icon("map", class = "far"),
-                               #                width = '300px')
-                               #  ),
-                               div(style="display:inline-block",
-                                   actionButton('submit_route_switch_inputs',
-                                                label = "Submit Climbs",
-                                                icon = icon("cloud-upload-alt"),
-                                                width = '300px')
-                               )
-                           )
+             br(), br(),
+
+             # User submits routes, which are written to the MySQL database and given a timestamp (time of the send) 
+             div(align="center", 
+                 actionButton('submit_route_check_inputs',
+                          label = "Submit Climbs",
+                          icon = icon("cloud-upload-alt"),
+                          width = '300px')
              )
     ),
     
-    # tabPanel("User Info",
-    #          verbatimTextOutput("user_info")
-    #          ),
-    
+    # Logout tab & button
     tabPanel("Log Out",
              br(),
              logoutButton(label = 'Log Out', width = '400px', height = '200px'),
              br()
     )
+    
+    # tabPanel("User Info",
+    #          verbatimTextOutput("user_info")
+    #          ),
+    
     
     # tabPanel("Client Info",
     #          verbatimTextOutput("client_info")
@@ -93,6 +105,7 @@ ui <- fluidPage(theme = "style.css",
 
 server <- function(input, output, session) {
   
+  # Render selectizeInput with all gyms in the database that have a blueprint
   output$gym_selectize <- renderUI({
     gyms <- dbGetQuery(pool, 'select gym_name, gym_id from gyms where blueprint is not null')
     selectizeInput(
@@ -102,33 +115,41 @@ server <- function(input, output, session) {
     )
   })
   
-  # Generate gym blueprint
-  output$gym_blueprint <- renderPlot({
+  # gym_polygon()
+  # req(s): input$selected_gym
+  # Returns a tibble of gym polygon coordinates to be used for plotting
+  gym_polygon <- reactive({
     
     req(input$selected_gym)
     
     sql <- sqlInterpolate(pool, 'SELECT ST_AsWKT(blueprint) as WKT FROM gyms WHERE GYM_ID = ?gym_id',
                           gym_id = input$selected_gym)
     
-    gym_polygon_df <-
-      dbGetQuery(pool, sql) %>%
+    dbGetQuery(pool, sql) %>%
       `[`(1) %>% readWKT() %>% 
-      `@`(polygons) %>% `[[`(1) %>% `@`(Polygons) %>% `[[`(1) %>% `@`(coords) %>% as_tibble()
-    
-    ggplot(gym_polygon_df, aes(x=x, y=y)) + 
-      geom_polygon(fill="#28c9c4") +
-      ylim(min(gym_polygon_df$y) - 10, 100) +
-      theme_void() + 
-      theme(plot.margin=unit(c(0,0,0,0), "mm"),
-            panel.background=element_rect(fill="#333333")) 
-    
+      `@`(polygons) %>% `[[`(1) %>% `@`(Polygons) %>% `[[`(1) %>% `@`(coords) %>%
+      as_tibble()
+
   })
   
-  output$click_info <- renderPrint({
-    cat("input$plot_click:\n")
-    str(input$plot_click)
+  # Plot gym polygon
+  output$gym_blueprint <- renderPlot({
+    
+    df <- gym_polygon()
+    
+    df %>% 
+      ggplot(aes(x=x, y=y)) + 
+        geom_polygon(fill="#28c9c4", color="#ffffff", size = 2) +
+        ylim(min(df$y) - 10, 100) +
+        theme_void() + 
+        theme(plot.margin=unit(c(0,0,0,0), "mm"),
+              panel.background=element_rect(fill="#333333")) 
+    
   })
-  
+
+  # gym_routes()
+  # req(s): input$selected_gym
+  # Returns all of the selected gym's current routes, ordered from left to right (route_x ascending)
   gym_routes <- reactive({
     req(input$selected_gym)
 
@@ -137,105 +158,160 @@ server <- function(input, output, session) {
     
     dbGetQuery(pool, sql) %>%
       arrange(route_x)
-    
   })
   
-  output$gym_routes_datatable <- renderDT(gym_routes())
+  # gym_routes_click_distance()
+  # req(s): input$plot_click, gym_routes()
+  # Adds a column to gym_routes() containing the distance from each route to the user's click
+  gym_routes_click_distance <- eventReactive(input$plot_click, {
+    gym_routes() %>% 
+      mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2))
+  })
   
-  output$route_switch_inputs <- renderUI({
+  # Generate checkboxes for each route in the gym
+  # req(s): input$selected_gym
+  output$route_check_inputs <- renderUI({
+    
     req(input$selected_gym)
     
+    # Get only the columns needed to generate the checkbox
     routes <- gym_routes() %>% select(route_id, color, grade_v)
     
-    f <- function(route_id,color,grade_v){
-      div(class="same-row", align = "center",
-        shinyWidgets::checkboxGroupButtons(
-          inputId = paste0("route_",route_id),
-          label = div(align = "center",
-            style = paste(
-              "text-align:center",
-              "font-size:30px",
-              "font-weight:bold",
-              paste0("color:", color, ";"), sep="; "
-            ),
-            paste0("V",grade_v)
-          ),
-          choices = c("Sent"),
-          direction = 'vertical',
-          status = 'primary',
-          checkIcon = list(
-            yes = icon("ok", 
-                       lib = "glyphicon"),
-            no = icon("remove",
-                      lib = "glyphicon"))
-        )
+    # This function will be applied to every row in ^
+    generate_single_checkbox <- function(route_id,color,grade_v){
+      # Generate a custom div, .routes_row, with properties defined in style.css
+      div(class="routes-row", align = "center",
+          # Inside of which is a checkbox:
+            shinyWidgets::checkboxGroupButtons(
+              inputId = paste0("route_",route_id),
+              label = div(align = "center",
+                style = paste(
+                  "text-align:center",
+                  "font-size:30px",
+                  "font-weight:bold",
+                  paste0("color:", color, ";"), sep="; "
+                ),
+                paste0("V",grade_v)
+              ),
+              # Currently, only one choice (binary)
+              choices = c("Sent"),
+              # If more choices added, will stack vertically
+              direction = 'vertical',
+              # status controls the color of the buttons
+              status = 'primary',
+              # icons for sent / not sent
+              checkIcon = list(
+                yes = icon("ok", 
+                           lib = "glyphicon"),
+                no = icon("remove",
+                          lib = "glyphicon"))
+            )
       )
     }
     
-    purrr::pmap(routes, f)
+    # Use pmap to apply the function to all routes (returns a list of divs)
+    purrr::pmap(routes, generate_single_checkbox)
     
   })
   
+  # Scroll to checkboxes nearest to user's click
+  # req(s): gym_routes_click_distance()
   observeEvent(input$plot_click, {
     # get closest route to click
-    route_switch_id <- gym_routes() %>% 
-      mutate(d = sqrt((input$plot_click$x - route_x)^2 + (input$plot_click$y - route_y)^2)) %>% 
+    route_check_id <- gym_routes_click_distance() %>% 
       top_n(-1, d) %>% 
       pull(route_id) %>% 
       paste0("route_", .)
       
-    js_text <- paste0("document.getElementById('", route_switch_id, "').scrollIntoView({behavior: 'smooth', inline: 'center'})")
+    # prepare JS call to .scrollIntoView() 
+    js_text <- paste0("document.getElementById('", route_check_id, "').scrollIntoView({behavior: 'smooth', inline: 'center'})")
 
-    print(js_text)
-    
+    # run JS
     shinyjs::runjs(js_text)
     
   })
   
-  observeEvent(input$goto_gym_blueprint, {
-    
-    shinyjs::runjs("document.getElementById('gym_blueprint').scrollIntoView({behavior: 'smooth'})")
-    
-  })
-  
-  observeEvent(input$submit_route_switch_inputs, {
+  # Write checked routes to 
+  observeEvent(input$submit_route_check_inputs, {
     
     req(input$selected_gym)
     
-    route_switch_ids <- gym_routes() %>% 
+    # Get atomic vector of route_ids with "route_" prepended.
+    route_check_ids <- gym_routes() %>% 
       pull(route_id) %>% 
       paste0("route_", .)
     
-    sends <- route_switch_ids %>%
+    # Map route_ids and the values of their checkboxes to a dataframe, filter for sends, and add the user's auth0 sub value
+    # as a column.
+    sends <- route_check_ids %>%
       map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE)) %>% 
       filter(value == "Sent") %>% 
       mutate(route_id = as.integer(substr(route, 7, nchar(route))),
              climber_auth0 = session$userData$auth0_info$sub) %>% 
       select(route_id, climber_auth0)
     
-    write <- function(route_id, climber_auth0){
-      sql <- paste0("INSERT INTO sends (route_id, climber_auth0) VALUES (", route_id, ", '", climber_auth0, "')")
-      dbExecute(pool, sql)
+    # If the user has checked more than 0 routes, write these to the database.
+    if(nrow(sends) > 0){
+      
+      write <- function(route_id, climber_auth0){
+        sql <- paste0("INSERT INTO sends (route_id, climber_auth0) VALUES (", route_id, ", '", climber_auth0, "')")
+        dbExecute(pool, sql)
+      }
+      
+      # As with the creation of checkboxes, apply the write function to the dataframe of sends using purrr::pmap
+      purrr::pmap(sends, write)
+      
+      # Notify user their sends have been written to the database
+      # TODO: implement an actual check here
+      sendSweetAlert(
+        session = session,
+        title = "Success!",
+        text = "Your sends have been uploaded to the ClimbHub Cloud",
+        type = "success"
+      )
+      
+      # Reset checkboxes
+      lapply(route_check_ids, function(x){updateCheckboxGroupButtons(session, x, selected = character(0))})
+      
+    } else {
+      # the user has not checked any routes, or there was an issue when creating the sends data.frame
+      sendSweetAlert(session,
+                     title = "Error",
+                     text = "Try again. Make sure your sends have been checked off!", type = "warning"
+                     )
     }
-    
-    purrr::pmap(sends, write)
-    
-    lapply(route_switch_ids, function(x){updateCheckboxGroupButtons(session, x, selected = character(0))})
      
   })
   
-  output$routes_for_submission <- renderPrint({
+
+# Debugging / deprecated functions ----------------------------------------
+
+  # ---Deprecated---
+  # Returns viewport to gym_blueprint
+  observeEvent(input$goto_gym_blueprint, {
+    
+    shinyjs::runjs("document.getElementById('gym_blueprint').scrollIntoView({behavior: 'smooth'})")
+    
+  })
+  
+  
+  output$print_route_check_inputs <- renderPrint({
     
     req(input$selected_gym)
     
-    route_switch_ids <- gym_routes() %>% 
+    route_check_ids <- gym_routes() %>% 
       pull(route_id) %>% 
       paste0("route_", .)
     
-    route_switch_ids %>%
+    route_check_ids %>%
       map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE))
     
   })
+  
+
+  
+  # print info on all of the gym's routes
+  output$gym_routes_datatable <- renderDT(gym_routes())
   
   # print client info
   output$client_info <- renderPrint({
@@ -250,10 +326,16 @@ server <- function(input, output, session) {
   output$credential_info <- renderPrint({
     session$userData$auth0_credentials
   })
-  
-  onStop(function() pool::poolClose(pool))
+
+
+# On exit -----------------------------------------------------------------
+
+  # onStop(function() pool::poolClose(pool))
   
 }
+
+
+# Start app ---------------------------------------------------------------
 
 shinyAppAuth0(ui, server)
 # shiny::shinyApp(ui, server)
