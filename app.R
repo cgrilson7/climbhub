@@ -66,7 +66,11 @@ ui <- fluidPage(theme = "style.css",
              br(),
              
              # Horizontal bar of routes scrolls to the routes nearest to the user's click
-             div(style = 'overflow-x:scroll; -webkit-overflow-scrolling: touch;',
+             div(style = 'overflow-x:scroll;
+                          -webkit-overflow-scrolling: touch;
+                          border: white;
+                          border-top-style: solid;
+                          border-bottom-style: solid;',
                  uiOutput(outputId="route_check_inputs")
              ),
 
@@ -196,7 +200,7 @@ server <- function(input, output, session) {
                 paste0("V",grade_v)
               ),
               # Currently, only one choice (binary)
-              choices = c("Sent"),
+              choices = c(" "),
               # If more choices added, will stack vertically
               direction = 'vertical',
               # status controls the color of the buttons
@@ -247,7 +251,7 @@ server <- function(input, output, session) {
     # as a column.
     sends <- route_check_ids %>%
       map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE)) %>% 
-      filter(value == "Sent") %>% 
+      filter(value == " ") %>% 
       mutate(route_id = as.integer(substr(route, 7, nchar(route))),
              climber_auth0 = session$userData$auth0_info$sub) %>% 
       select(route_id, climber_auth0)

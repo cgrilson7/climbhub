@@ -31,6 +31,6 @@ body {
 .routes-row{
   max-width: 200px;
   display: table-cell;
-  padding: 5px 5px;
+  padding: 2px 15px;
   background-color: #28c9c4;
 }
