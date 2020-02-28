@@ -82,7 +82,8 @@ ui <- fluidPage(theme = "style.css",
     ),
     
     tabPanel("My Stats",
-             br()
+             br(),
+             div(align = "center", plotOutput("sends_over_time"))
              ),
     
     # tabPanel("User Info",
@@ -112,6 +113,8 @@ ui <- fluidPage(theme = "style.css",
 
 server <- function(input, output, session) {
   
+  values <- reactiveValues(climber_is_in_db = FALSE)
+  
   # Upon session start, check if the user (should be authenticated at this point) is in the `climbers` table
   observeEvent(session$userData$auth0_info, {
     sql <- sqlInterpolate(pool, "SELECT * FROM climbers WHERE sub = ?", session$userData$auth0_info$sub)
@@ -127,8 +130,19 @@ server <- function(input, output, session) {
       insert_statement <- paste0("INSERT INTO climbers (", paste(params_names, collapse = ', '), ") VALUES (?", paste(params_names, collapse = ', ?'), ");")
       # interpolate
       insert_statement_interpolated <- sqlInterpolate(pool, insert_statement, .dots=params_list)
+      # insert the new climber
       dbExecute(pool, insert_statement_interpolated)
+      
     }
+    
+    values$climber_is_in_db <- TRUE
+    
+  })
+  
+  climber_id <- reactive({
+    req(values$climber_is_in_db == TRUE)
+    dbGetQuery(pool,
+               paste0("SELECT climber_id FROM climbers WHERE sub = '", session$userData$auth0_info$sub, "'")) %>% pull()
   })
   
   # Render selectizeInput with all gyms in the database that have a blueprint
@@ -270,17 +284,19 @@ server <- function(input, output, session) {
     # Map route_ids and the values of their checkboxes to a dataframe, filter for sends, and add the user's auth0 sub value
     # as a column.
     sends <- route_check_ids %>%
-      map_df(~data.frame(route = .x, value = ifelse(is.null(input[[.x]]), NA, input[[.x]]), stringsAsFactors = FALSE)) %>% 
+      map_df(~data.frame(route = .x,
+                         value = ifelse(is.null(input[[.x]]), NA, input[[.x]]),
+                         stringsAsFactors = FALSE)) %>% 
       filter(value == "Sent") %>% 
       mutate(route_id = as.integer(substr(route, 7, nchar(route))),
-             climber_auth0 = session$userData$auth0_info$sub) %>% 
-      select(route_id, climber_auth0)
+             climber_id = climber_id()) %>% 
+      select(route_id, climber_id)
     
     # If the user has checked more than 0 routes, write these to the database.
-    if(nrow(sends) > 0){
+    if(length(sends) > 0){
       
-      write <- function(route_id, climber_auth0){
-        sql <- paste0("INSERT INTO sends (route_id, climber_auth0) VALUES (", route_id, ", '", climber_auth0, "')")
+      write <- function(route_id, climber_id){
+        sql <- paste0("INSERT INTO sends (route_id, climber_id) VALUES (", route_id, ", '", climber_id, "')")
         dbExecute(pool, sql)
       }
       
@@ -307,6 +323,24 @@ server <- function(input, output, session) {
                      )
     }
      
+  })
+  
+  past_sends <- reactive({
+    dbGetQuery(pool,
+               paste("SELECT s.send_datetime, r.gym_id, r.color, r.grade_v",
+                      "FROM sends s LEFT JOIN routes r USING (route_id)",
+                      "WHERE climber_id = ", climber_id())
+    )
+  })
+  
+  output$sends_over_time <- renderPlot({
+    past_sends() %>% 
+      select(send_datetime, color, grade_v) %>% 
+      collect() %>% 
+      ggplot(aes(x = send_datetime, y = grade_v, colour = color)) +
+        geom_jitter(size = 2) +
+        scale_color_identity() +
+        scale_y_continuous(breaks = scales::breaks_pretty())
   })
   
 
