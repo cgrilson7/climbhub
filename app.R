@@ -49,7 +49,7 @@ ui <- fluidPage(theme = "style.css",
     # - User submits routes, which are written to the MySQL database and given a timestamp (time of the send) 
     # - Route checkboxes are reset
     
-    tabPanel("Routes",
+    tabPanel("Log Climbs",
              
              # User selects their gym
              div(align = "center",
@@ -81,17 +81,22 @@ ui <- fluidPage(theme = "style.css",
              )
     ),
     
-    # Logout tab & button
-    tabPanel("Log Out",
-             br(),
-             logoutButton(label = 'Log Out', width = '400px', height = '200px'),
+    tabPanel("My Stats",
              br()
-    )
+             ),
     
     # tabPanel("User Info",
     #          verbatimTextOutput("user_info")
     #          ),
     
+    # Logout tab & button
+    tabPanel("Log Out",
+             br(),
+             div(align = "center", logoutButton(label = 'Log Out', width = '400px', height = '200px')),
+             br()
+    )
+    
+
     
     # tabPanel("Client Info",
     #          verbatimTextOutput("client_info")
@@ -106,6 +111,25 @@ ui <- fluidPage(theme = "style.css",
 )
 
 server <- function(input, output, session) {
+  
+  # Upon session start, check if the user (should be authenticated at this point) is in the `climbers` table
+  observeEvent(session$userData$auth0_info, {
+    sql <- sqlInterpolate(pool, "SELECT * FROM climbers WHERE sub = ?", session$userData$auth0_info$sub)
+    climber_row <- dbGetQuery(pool, sql)
+    
+    if(nrow(climber_row) == 0){
+      params_names <- c('sub', 'given_name', 'family_name', 'nickname', 'name')
+      params_list <- session$userData$auth0_info[params_names] %>% set_names(params_names)
+      # set NULLs to NA
+      params_list[unlist(lapply(params_list, is.null))] <- NA
+      
+      # prepare insert statement with wildcards
+      insert_statement <- paste0("INSERT INTO climbers (", paste(params_names, collapse = ', '), ") VALUES (?", paste(params_names, collapse = ', ?'), ");")
+      # interpolate
+      insert_statement_interpolated <- sqlInterpolate(pool, insert_statement, .dots=params_list)
+      dbExecute(pool, insert_statement_interpolated)
+    }
+  })
   
   # Render selectizeInput with all gyms in the database that have a blueprint
   output$gym_selectize <- renderUI({
@@ -233,7 +257,7 @@ server <- function(input, output, session) {
     
   })
   
-  # Write checked routes to 
+  # Write checked routes to `sends` table in DB
   observeEvent(input$submit_route_check_inputs, {
     
     req(input$selected_gym)
