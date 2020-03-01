@@ -66,7 +66,11 @@ ui <- fluidPage(theme = "style.css",
              br(),
              
              # Horizontal bar of routes scrolls to the routes nearest to the user's click
-             div(style = 'overflow-x:scroll; -webkit-overflow-scrolling: touch;',
+             div(style = 'overflow-x:scroll;
+                          -webkit-overflow-scrolling: touch;
+                          border: white;
+                          border-top-style: solid;
+                          border-bottom-style: solid;',
                  uiOutput(outputId="route_check_inputs")
              ),
 
