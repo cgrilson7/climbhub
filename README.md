@@ -1,5 +1,6 @@
 # ClimbHub
-#### Notice: app currently down while we develop a strategy for server costs
+## Access the app (here)[http://ec2-3-92-33-255.compute-1.amazonaws.com:3838/]
+
 ![](https://publicdomainvectors.org/photos/escalade.png)
 
 Tracking your climbs and engaging in some friendly competition - at your local gym.
