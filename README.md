@@ -1,5 +1,5 @@
 # ClimbHub
-## Access the app [here](http://ec2-3-92-33-255.compute-1.amazonaws.com:3838/)
+## App down - server costs are too damn high
 
 ![](https://publicdomainvectors.org/photos/escalade.png)
 
